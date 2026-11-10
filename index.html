@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Парольник — генератор паролей</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
+<style>
+:root{--bg:#0b0f14;--card:#121a23;--line:#1f2b38;--txt:#e7eef7;--dim:#8ba1b8;--acc:#4da3ff;--ok:#3ddc84;--warn:#ffb020;--bad:#ff5d5d}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px}
+.wrap{width:100%;max-width:560px}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--dim);font-size:14px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+.pwbox{position:relative;background:#0a1118;border:1px solid var(--line);border-radius:12px;padding:18px 92px 18px 16px;font:17px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all;min-height:64px;margin-bottom:16px}
+.pwbtns{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px}
+.pbtn{background:#182533;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;transition:.15s}
+.pbtn:hover{background:#223449}
+.pbtn.ok{border-color:var(--ok);color:var(--ok)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row label{font-size:15px}
+.sw{position:relative;width:42px;height:24px;flex:none}
+.sw input{opacity:0;width:0;height:0}
+.sw i{position:absolute;inset:0;background:#223449;border-radius:24px;transition:.2s;cursor:pointer}
+.sw i:before{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#8ba1b8;top:3px;left:3px;transition:.2s}
+.sw input:checked+i{background:var(--acc)}
+.sw input:checked+i:before{background:#fff;transform:translateX(18px)}
+.lenval{color:var(--acc);font-weight:700;min-width:28px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc);margin:8px 0 2px}
+.meter{height:8px;border-radius:6px;background:#182533;overflow:hidden;margin:14px 0 6px}
+.meter i{display:block;height:100%;width:0;border-radius:6px;transition:width .3s,background .3s}
+.mtxt{font-size:13px;color:var(--dim)}
+.gen{width:100%;background:var(--acc);color:#04121f;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;transition:.15s}
+.gen:active{transform:scale(.98)}
+.hist{font-size:13px;color:var(--dim);font-family:ui-monospace,monospace;word-break:break-all}
+.hist div{padding:6px 0;border-bottom:1px dashed var(--line)}
+footer{margin-top:20px;color:#3d5068;font-size:12px;text-align:center}
+a{color:#3d5068}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Парольник</h1>
+<div class="sub">Генератор паролей. Всё считается в браузере, ничего никуда не уходит.</div>
+<div class="card">
+  <div class="pwbox"><span id="pw"></span>
+    <div class="pwbtns">
+      <button class="pbtn" id="copy">копировать</button>
+    </div>
+  </div>
+  <div class="meter"><i id="bar"></i></div>
+  <div class="mtxt" id="mtxt"></div>
+</div>
+<div class="card">
+  <div class="row"><label>Длина</label><span class="lenval" id="lenval">16</span></div>
+  <input type="range" id="len" min="4" max="64" value="16">
+  <div class="row"><label>Строчные (a-z)</label><label class="sw"><input type="checkbox" id="low" checked><i></i></label></div>
+  <div class="row"><label>Прописные (A-Z)</label><label class="sw"><input type="checkbox" id="up" checked><i></i></label></div>
+  <div class="row"><label>Цифры (0-9)</label><label class="sw"><input type="checkbox" id="dig" checked><i></i></label></div>
+  <div class="row"><label>Символы (!@#$...)</label><label class="sw"><input type="checkbox" id="sym" checked><i></i></label></div>
+  <div class="row"><label>Без похожих (0/O, 1/l/I)</label><label class="sw"><input type="checkbox" id="noamb"><i></i></label></div>
+</div>
+<button class="gen" id="gen">Сгенерировать</button>
+<div class="card" style="margin-top:16px">
+  <div class="mtxt" style="margin-bottom:6px">Последние (только в этой вкладке):</div>
+  <div class="hist" id="hist"></div>
+</div>
+<footer><a href="https://zyrqon.github.io">zyrqon.github.io</a> · работает без сервера</footer>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const sets={low:"abcdefghijkmnopqrstuvwxyz",up:"ABCDEFGHJKLMNPQRSTUVWXYZ",dig:"0123456789",sym:"!@#$%^&*()-_=+[]{};:,.<>?/"};
+const full={low:"abcdefghijklmnopqrstuvwxyz",up:"ABCDEFGHIJKLMNOPQRSTUVWXYZ",dig:"0123456789"};
+function pool(){
+  let p="";for(const k of ["low","up","dig","sym"])if($(k).checked)p+=(k=="sym"?sets[k]:full[k]);
+  if($("noamb").checked)p=p.split("").filter(c=>"O0oIl1|".indexOf(c)<0).join("");
+  return p;
+}
+function gen(){
+  const len=+$("len").value,p=pool();
+  $("lenval").textContent=len;
+  if(!p){$("pw").textContent="включи хотя бы один набор";$("bar").style.width="0";return}
+  const buf=new Uint32Array(len);crypto.getRandomValues(buf);
+  let s="";for(let i=0;i<len;i++)s+=p[buf[i]%p.length];
+  $("pw").textContent=s;
+  const bits=len*Math.log2(p.length),b=$("bar");
+  b.style.width=Math.min(100,bits/2)+"%";
+  b.style.background=bits<40?"var(--bad)":bits<70?"var(--warn)":"var(--ok)";
+  $("mtxt").textContent="энтропия ~"+Math.round(bits)+" бит · "+(bits<40?"слабый":bits<70?"крепкий":"взлом в-grade");
+  const h=document.createElement("div");h.textContent=s;$("hist").prepend(h);
+  while($("hist").children.length>5)$("hist").lastChild.remove();
+}
+$("len").oninput=()=>{$("lenval").textContent=$("len").value};
+$("gen").onclick=gen;
+$("copy").onclick=()=>{
+  const t=$("pw").textContent;if(!t)return;
+  navigator.clipboard.writeText(t).then(()=>{$("copy").textContent="✓";$("copy").classList.add("ok");setTimeout(()=>{$("copy").textContent="копировать";$("copy").classList.remove("ok")},1200)});
+};
+gen();
+</script>
+</body>
+</html>
